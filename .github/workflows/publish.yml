@@ -15,12 +15,12 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      
+      - name: Copy README for pack
+        run: cp README.md ./PartialObjectExtractor/README.md
 
       - name: Restore dependencies
         run: dotnet restore
-
-      - name: Copy README for pack
-        run: cp README.md ./PartialObjectExtractor/README.md
 
       - name: Build
         run: dotnet build --configuration Release --no-restore
