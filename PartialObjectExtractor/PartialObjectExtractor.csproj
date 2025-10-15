@@ -21,8 +21,12 @@
     <ItemGroup>
       <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     </ItemGroup>
-    
-    <ItemGroup>
-        <None Include="..\README.md" Pack="true" PackagePath="/" />
-    </ItemGroup>
+
+    <Target Name="CopyReadme" BeforeTargets="GenerateNuspec">
+        <Copy SourceFiles="..\README.md" DestinationFiles="README.md" SkipUnchangedFiles="true" />
+    </Target>
+
+    <Target Name="CleanReadme" AfterTargets="Pack">
+        <Delete Files="README.md" />
+    </Target>
 </Project>
