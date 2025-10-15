@@ -19,6 +19,9 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
+      - name: Copy README for pack
+        run: cp README.md ./PartialObjectExtractor/README.md
+
       - name: Build
         run: dotnet build --configuration Release --no-restore
 
