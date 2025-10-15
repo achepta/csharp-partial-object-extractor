@@ -1,0 +1,5 @@
+.idea
+**/bin
+**/obj
+**/coverage
+QueryPartialObject.sln.DotSettings.user
