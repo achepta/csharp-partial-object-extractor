@@ -12,12 +12,18 @@ that return flat arrays of leaf values, this extractor preserves the object stru
 **High Performance**: Uses reflection to traverse objects and extract only requested properties *before* serialization, avoiding the overhead of serializing entire object graphs. Only the extracted
 data is converted to JSON, making it significantly faster for large objects when you only need a subset of data.
 
+Usage example in [CloudGbxQuery](https://github.com/achepta/cloud-gbx-query/blob/master/Program.cs#L159)
+
 ## Installation
 
-```csharp
-using QueryPartialObject;
+```bash
+dotnet add package PartialObjectExtractor
+```
 
-var extractor = new PartialObjectExtractor();
+```csharp
+using PartialObjectExtractor;
+
+var extractor = new PartialExtractor();
 ```
 
 ## Basic Usage
@@ -168,7 +174,7 @@ Support for custom JSON serialization settings:
 var settings = new JsonSerializerSettings {
     ContractResolver = new CamelCasePropertyNamesContractResolver()
 };
-var extractor = new PartialObjectExtractor(settings);
+var extractor = new PartialExtractor(settings);
 ```
 
 Respects `[JsonProperty]` attributes:
