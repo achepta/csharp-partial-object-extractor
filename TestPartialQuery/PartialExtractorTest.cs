@@ -1,10 +1,11 @@
+
 // dotnet test -c Release  --verbosity normal  --collect:"XPlat Code Coverage" --results-directory ./coverage
 // dotnet tool install -g dotnet-reportgenerator-globaltool
 // reportgenerator -reports:"**/coverage.cobertura.xml" -targetdir:"coverage/coveragereport"
 
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using PartialObjectExtractor;
 
 namespace TestPartialQuery;
@@ -116,6 +117,14 @@ public class PartialExtractorTest {
         };
     }
 
+    private static JsonObject ParseJsonObject(string json) {
+        return JsonNode.Parse(json)!.AsObject();
+    }
+
+    private static bool JsonEquals(JsonObject? a, JsonObject? b) {
+        return JsonNode.DeepEquals(a, b);
+    }
+
     #endregion
 
     #region test recursive
@@ -123,19 +132,19 @@ public class PartialExtractorTest {
     [Test]
     public void RecursiveDescent_SingleProperty() {
         var result = extractor.ExtractPaths(testData, ["$..Child1"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Parent": { "Child1": "ParentChild1" },
                                        "AnotherParent": { "Child1": "AnotherChild1" }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void RecursiveDescent_DeepNesting() {
         var result = extractor.ExtractPaths(testData, ["$..Value"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Deep": {
                                          "Level1": {
@@ -159,14 +168,14 @@ public class PartialExtractorTest {
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void RecursiveDescent_DoubleRecursive() {
         // This should find Level1 at any depth, then Value at any depth under those Level1s
         var result = extractor.ExtractPaths(testData, ["$..Level1..Value"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Deep": {
                                          "Level1": {
@@ -190,7 +199,7 @@ public class PartialExtractorTest {
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     #endregion
@@ -200,7 +209,7 @@ public class PartialExtractorTest {
     [Test]
     public void Wildcard_OnObject() {
         var result = extractor.ExtractPaths(testData, ["$.Parent[*]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Parent": {
                                          "Child1": "ParentChild1",
@@ -208,13 +217,13 @@ public class PartialExtractorTest {
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void Wildcard_OnArray() {
         var result = extractor.ExtractPaths(testData, ["$..Tags[*]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Products": [
                                          { "Tags": ["new", "sale", "popular"] },
@@ -224,7 +233,7 @@ public class PartialExtractorTest {
                                        ]
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     #endregion
@@ -234,7 +243,7 @@ public class PartialExtractorTest {
     [Test]
     public void Multiselect_WithRecursiveDescent() {
         var result = extractor.ExtractPaths(testData, ["$..['Child1', 'Child2']"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Parent": {
                                          "Child1": "ParentChild1",
@@ -246,23 +255,24 @@ public class PartialExtractorTest {
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void Multiselect_AfterWildcard() {
         var result = extractor.ExtractPaths(testData, ["$.Products[*]['Name', 'Price']"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Products": [
-                                         { "Name": "Product1", "Price": 10.0 },
-                                         { "Name": "Product2", "Price": 20.0 },
-                                         { "Name": "Product3", "Price": 30.0 },
-                                         { "Name": "Product4", "Price": 40.0 }
+                                         { "Name": "Product1", "Price": 10 },
+                                         { "Name": "Product2", "Price": 20 },
+                                         { "Name": "Product3", "Price": 30 },
+                                         { "Name": "Product4", "Price": 40 }
                                        ]
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
     
     #endregion
@@ -272,7 +282,7 @@ public class PartialExtractorTest {
     [Test]
     public void NestedArrays_MultipleIndices() {
         var result = extractor.ExtractPaths(testData, ["$.NestedArrays[0][0][1]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "NestedArrays": [
                                          [
@@ -281,13 +291,13 @@ public class PartialExtractorTest {
                                        ]
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void NestedArrays_WildcardAtMultipleLevels() {
         var result = extractor.ExtractPaths(testData, ["$.NestedArrays[*][0][0]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "NestedArrays": [
                                          [
@@ -299,13 +309,13 @@ public class PartialExtractorTest {
                                        ]
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void NestedArrays_SliceInNested() {
         var result = extractor.ExtractPaths(testData, ["$.NestedArrays[0][0][:2]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "NestedArrays": [
                                          [
@@ -314,7 +324,7 @@ public class PartialExtractorTest {
                                        ]
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
     
     #endregion
@@ -324,56 +334,56 @@ public class PartialExtractorTest {
     [Test]
     public void EdgeCase_EmptyPathList() {
         var result = extractor.ExtractPaths(testData, []);
-        Assert.That(result, Is.EqualTo(new JObject()));
+        Assert.That(JsonEquals(result, new JsonObject()), Is.True);
     }
 
     [Test]
     public void EdgeCase_NullSource() {
         var result = extractor.ExtractPaths<object>(null, ["$.Property"]);
-        Assert.That(result, Is.EqualTo(new JObject()));
+        Assert.That(JsonEquals(result, new JsonObject()), Is.True);
     }
 
     [Test]
     public void EdgeCase_NonExistentProperty() {
         var result = extractor.ExtractPaths(testData, ["$.NonExistent"]);
-        Assert.That(result, Is.EqualTo(new JObject()));
+        Assert.That(JsonEquals(result, new JsonObject()), Is.True);
     }
 
     [Test]
     public void EdgeCase_NonExistentNestedProperty() {
         var result = extractor.ExtractPaths(testData, ["$.Parent.NonExistent"]);
-        Assert.That(result, Is.EqualTo(new JObject()));
+        Assert.That(JsonEquals(result, new JsonObject()), Is.True);
     }
 
     [Test]
     public void EdgeCase_ArrayIndexOutOfBounds() {
         var result = extractor.ExtractPaths(testData, ["$.Items[999]"]);
-        Assert.That(result, Is.EqualTo(new JObject()));
+        Assert.That(JsonEquals(result, new JsonObject()), Is.True);
     }
 
     [Test]
     public void EdgeCase_NegativeIndexLargerThanArray() {
         var result = extractor.ExtractPaths(testData, ["$.Items[-999]"]);
-        Assert.That(result, Is.EqualTo(new JObject()));
+        Assert.That(JsonEquals(result, new JsonObject()), Is.True);
     }
 
     [Test]
     public void EdgeCase_RecursiveDescentNoMatch() {
         var result = extractor.ExtractPaths(testData, ["$..NonExistentProperty"]);
-        Assert.That(result, Is.EqualTo(new JObject()));
+        Assert.That(JsonEquals(result, new JsonObject()), Is.True);
     }
 
     [Test]
     public void EdgeCase_MultiselectWithNonExistent() {
         var result = extractor.ExtractPaths(testData, ["$.Parent['Child1', 'NonExistent']"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Parent": {
                                          "Child1": "ParentChild1"
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
@@ -401,27 +411,27 @@ public class PartialExtractorTest {
     [Test]
     public void CaseSensitivity_LowercaseProperty() {
         var result = extractor.ExtractPaths(testData, ["$.parent.child1"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Parent": {
                                          "Child1": "ParentChild1"
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void CaseSensitivity_MixedCase() {
         var result = extractor.ExtractPaths(testData, ["$.pRoDuCtS[0].nAmE"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Products": [
                                          { "Name": "Product1" }
                                        ]
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
     
     #endregion
@@ -430,20 +440,20 @@ public class PartialExtractorTest {
 
     [Test]
     public void JsonSettings_CamelCaseOutput() {
-        var settings = new JsonSerializerSettings {
-            ContractResolver = new CamelCasePropertyNamesContractResolver()
+        var options = new JsonSerializerOptions {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
-        var camelExtractor = new PartialExtractor(settings);
+        var camelExtractor = new PartialExtractor(options);
 
         var result = camelExtractor.ExtractPaths(testData, ["$.Parent.Child1"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "parent": {
                                          "child1": "ParentChild1"
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
@@ -453,20 +463,20 @@ public class PartialExtractorTest {
         };
 
         var result = extractor.ExtractPaths(obj, ["$.CustomData.display_name"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "CustomData": {
                                          "display_name": "display"
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     private class CustomNamed {
         public string InternalName { get; set; }
 
-        [JsonProperty("display_name")] public string DisplayName { get; set; }
+        [JsonPropertyName("display_name")] public string DisplayName { get; set; }
     }
     
     #endregion
@@ -477,31 +487,31 @@ public class PartialExtractorTest {
     public void EmptyCollections_WildcardOnEmptyArray() {
         var obj = new { Items = new List<string>() };
         var result = extractor.ExtractPaths(obj, ["$.Items[*]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Items": []
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void EmptyCollections_SliceOnEmptyArray() {
         var obj = new { Items = new List<string>() };
         var result = extractor.ExtractPaths(obj, ["$.Items[0:5]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Items": []
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void EmptyCollections_RecursiveOnEmptyStructure() {
         var obj = new { Empty = new { } };
         var result = extractor.ExtractPaths(obj, ["$..Property"]);
-        Assert.That(result, Is.EqualTo(new JObject()));
+        Assert.That(JsonEquals(result, new JsonObject()), Is.True);
     }
     
     #endregion
@@ -511,20 +521,20 @@ public class PartialExtractorTest {
     [Test]
     public void Whitespace_InBracketNotation() {
         var result = extractor.ExtractPaths(testData, ["$[ 'Parent' ][ 'Child1' ]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Parent": {
                                          "Child1": "ParentChild1"
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void Whitespace_InMultiselect() {
         var result = extractor.ExtractPaths(testData, ["$.Parent[ 'Child1' , 'Child2' ]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Parent": {
                                          "Child1": "ParentChild1",
@@ -532,13 +542,13 @@ public class PartialExtractorTest {
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void Whitespace_InSlice() {
         var result = extractor.ExtractPaths(testData, ["$.Items[ 1 : 3 ]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Items": [
                                          null,
@@ -547,7 +557,7 @@ public class PartialExtractorTest {
                                        ]
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     #endregion
@@ -557,7 +567,7 @@ public class PartialExtractorTest {
     [Test]
     public void Slice_FullArray() {
         var result = extractor.ExtractPaths(testData, ["$.Items[:]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Items": [
                                          "first",
@@ -569,13 +579,13 @@ public class PartialExtractorTest {
                                        ]
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void Slice_NegativeRange() {
         var result = extractor.ExtractPaths(testData, ["$.Items[-3:-1]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Items": [
                                          null,
@@ -586,13 +596,13 @@ public class PartialExtractorTest {
                                        ]
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void Slice_BeyondBounds() {
         var result = extractor.ExtractPaths(testData, ["$.Items[4:100]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Items": [
                                          null,
@@ -604,29 +614,29 @@ public class PartialExtractorTest {
                                        ]
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
     
     [Test]
     public void InvalidSlice_StartGreaterThanEnd() {
         var result = extractor.ExtractPaths(testData, ["$.Items[5:2]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Items": []
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void EmptySlice() {
         var result = extractor.ExtractPaths(testData, ["$.Items[2:2]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Items": []
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
     
     #endregion
@@ -637,19 +647,19 @@ public class PartialExtractorTest {
     public void NullValues_InArray() {
         var obj = new { Items = new[] { "first", "second", null} };
         var result = extractor.ExtractPaths(obj, ["$.Items[*]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Items": ["first", "second", null]
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void NullValues_InObject() {
         var obj = new { Data = new { Name = "test", Value = (string)null } };
         var result = extractor.ExtractPaths(obj, ["$.Data[*]"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Data": {
                                          "Name": "test",
@@ -657,7 +667,7 @@ public class PartialExtractorTest {
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
     
     #endregion
@@ -668,26 +678,26 @@ public class PartialExtractorTest {
     public void MixedNotation_DotAndBracket() {
         var result = extractor.ExtractPaths(testData, ["$.Parent['Child1'].ToString()"]);
         // This should fail gracefully - ToString() is not a property
-        Assert.That(result, Is.EqualTo(new JObject()));
+        Assert.That(JsonEquals(result, new JsonObject()), Is.True);
     }
 
     [Test]
     public void MixedNotation_BracketThenDot() {
         var result = extractor.ExtractPaths(testData, ["$['Parent'].Child1"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Parent": {
                                          "Child1": "ParentChild1"
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
     public void MixedNotation_Complex() {
         var result = extractor.ExtractPaths(testData, ["$.Products[0]['Category'].Name"]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Products": [
                                          {
@@ -698,7 +708,7 @@ public class PartialExtractorTest {
                                        ]
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
     
     #endregion
@@ -712,7 +722,7 @@ public class PartialExtractorTest {
             "$.Parent.Child2",
             "$.Parent"
         ]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Parent": {
                                          "Child1": "ParentChild1",
@@ -720,7 +730,7 @@ public class PartialExtractorTest {
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
@@ -729,7 +739,7 @@ public class PartialExtractorTest {
             "$.Parent.Child1",
             "$..Child1"
         ]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Parent": {
                                          "Child1": "ParentChild1"
@@ -739,7 +749,8 @@ public class PartialExtractorTest {
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+       
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
@@ -749,7 +760,7 @@ public class PartialExtractorTest {
             "$.Items[2]",
             "$.Items[4]"
         ]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Items": [
                                          "first",
@@ -760,7 +771,7 @@ public class PartialExtractorTest {
                                        ]
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
@@ -769,7 +780,7 @@ public class PartialExtractorTest {
             "$..Products[0,2].Name",
             "$..Category.Level"
         ]);
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Products": [
                                          { "Name": "Product1", "Category": { "Level": 1 } },
@@ -779,7 +790,7 @@ public class PartialExtractorTest {
                                        ]
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
 
     [Test]
@@ -793,7 +804,7 @@ public class PartialExtractorTest {
             "$.Parent[*]"
         ]);
 
-        var expected = JObject.Parse("""
+        var expected = ParseJsonObject("""
                                      {
                                        "Items": [
                                          "first",
@@ -801,8 +812,8 @@ public class PartialExtractorTest {
                                          "third"
                                        ],
                                        "Products": [
-                                         { "Name": "Product1", "Price": 10.0 },
-                                         { "Name": "Product2", "Price": 20.0 },
+                                         { "Name": "Product1", "Price": 10 },
+                                         { "Name": "Product2", "Price": 20 },
                                          { "Name": "Product3" },
                                          { "Name": "Product4" }
                                        ],
@@ -815,7 +826,7 @@ public class PartialExtractorTest {
                                        }
                                      }
                                      """);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.That(JsonEquals(result, expected), Is.True);
     }
     
     #endregion

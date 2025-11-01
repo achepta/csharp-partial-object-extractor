@@ -1,21 +1,25 @@
-﻿using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
-using System.Collections;
+﻿using System.Collections;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace PartialObjectExtractor;
 
-public class PartialExtractor(JsonSerializerSettings? settings = null) {
-    private readonly JsonSerializer serializer = JsonSerializer.Create(settings ?? new());
+public class PartialExtractor {
+    private readonly JsonSerializerOptions options;
 
-    public JObject ExtractPaths<T>(T source, List<string> jsonPaths) {
+    public PartialExtractor(JsonSerializerOptions? options = null) {
+        this.options = options ?? new JsonSerializerOptions();
+    }
+
+    public JsonObject ExtractPaths<T>(T source, List<string> jsonPaths) {
         if (source is null) {
-            return new JObject();
+            return new JsonObject();
         }
 
-        var result = new JObject();
+        var result = new JsonObject();
         foreach (var path in jsonPaths) {
             var segments = new PathParser(path).Parse();
             var extractedValues = ExtractValuesForPath(source, segments);
@@ -285,43 +289,48 @@ public class PartialExtractor(JsonSerializerSettings? settings = null) {
     private static bool IsSearchableType(Type type) =>
         !type.IsPrimitive && type != typeof(string) && type != typeof(decimal);
 
-    private void BuildResultStructure(JObject result, ExtractedValue extractedValue) {
+    
+    private void BuildResultStructure(JsonObject result, ExtractedValue extractedValue) {
         if (extractedValue.Path.Count == 0) {
             return;
         }
 
-        JToken current = result;
+        JsonNode? current = result;
         for (int i = 0; i < extractedValue.Path.Count; i++) {
             var step = extractedValue.Path[i];
             var isLast = i == extractedValue.Path.Count - 1;
 
             switch (step) {
                 case PropertyStep { Name: var name }:
-                    if (isLast) {
-                        current[name] = extractedValue.Value is null ? null : JToken.FromObject(extractedValue.Value, serializer);
-                    }
-                    else {
-                        current[name] ??= extractedValue.Path[i + 1] is IndexStep ? new JArray() : new JObject();
-                        current = current[name]!;
+                    if (current is JsonObject obj) {
+                        if (isLast) {
+                            obj[name] = extractedValue.Value is null ? null : JsonSerializer.SerializeToNode(extractedValue.Value, options);
+                        }
+                        else {
+                            if (!obj.ContainsKey(name)) {
+                                obj[name] = extractedValue.Path[i + 1] is IndexStep ? new JsonArray() : new JsonObject();
+                            }
+                            current = obj[name];
+                        }
                     }
 
                     break;
 
                 case IndexStep { Index: var index }:
-                    var arr = (JArray)current;
-                    while (arr.Count <= index) {
-                        arr.Add(JValue.CreateNull());
-                    }
-
-                    if (isLast) {
-                        arr[index] = JToken.FromObject(extractedValue.Value ?? new { }, serializer);
-                    }
-                    else {
-                        if (arr[index]!.Type is JTokenType.Null) {
-                            arr[index] = extractedValue.Path[i + 1] is IndexStep ? new JArray() : new JObject();
+                    if (current is JsonArray arr) {
+                        while (arr.Count <= index) {
+                            arr.Add(null);
                         }
 
-                        current = arr[index]!;
+                        if (isLast) {
+                            arr[index] = extractedValue.Value is null ? null : JsonSerializer.SerializeToNode(extractedValue.Value, options);                        }
+                        else {
+                            if (arr[index] is null) {
+                                arr[index] = extractedValue.Path[i + 1] is IndexStep ? new JsonArray() : new JsonObject();
+                            }
+
+                            current = arr[index];
+                        }
                     }
 
                     break;
@@ -344,21 +353,25 @@ public class PartialExtractor(JsonSerializerSettings? settings = null) {
         }
 
         return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .FirstOrDefault(p => p.GetCustomAttribute<JsonPropertyAttribute>()?.PropertyName == name);
+            .FirstOrDefault(p => p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name == name);
     }
 
     private IEnumerable<PropertyInfo> GetProperties(Type type) =>
         type.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.GetIndexParameters().Length == 0);
 
     private string GetJsonPropertyName(PropertyInfo property) {
-        var jsonProp = property.GetCustomAttribute<JsonPropertyAttribute>();
-        return jsonProp?.PropertyName ?? (serializer.ContractResolver is CamelCasePropertyNamesContractResolver
-            ? ToCamelCase(property.Name)
-            : property.Name);
-    }
+        var jsonProp = property.GetCustomAttribute<JsonPropertyNameAttribute>();
+        if (jsonProp is not null) {
+            return jsonProp.Name;
+        }
 
-    private static string ToCamelCase(string str) =>
-        string.IsNullOrEmpty(str) || char.IsLower(str[0]) ? str : char.ToLower(str[0]) + str[1..];
+        // Check if the naming policy is camel case
+        if (options.PropertyNamingPolicy == JsonNamingPolicy.CamelCase) {
+            return JsonNamingPolicy.CamelCase.ConvertName(property.Name);
+        }
+
+        return property.Name;
+    }
 
     private class PathParser(string input) {
         private int position;
