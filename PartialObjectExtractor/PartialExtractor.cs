@@ -3,15 +3,15 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
 
 namespace PartialObjectExtractor;
 
-public class PartialExtractor {
-    private readonly JsonSerializerOptions options;
 
-    public PartialExtractor(JsonSerializerOptions? options = null) {
-        this.options = options ?? new JsonSerializerOptions();
+public class PartialExtractor(IJsonSerializer? serializer = null) {
+    private readonly IJsonSerializer serializer = serializer ?? new SystemTextJsonSerializer();
+
+    public PartialExtractor(JsonSerializerOptions? options) 
+        : this(new SystemTextJsonSerializer(options)) {
     }
 
     public JsonObject ExtractPaths<T>(T source, List<string> jsonPaths) {
@@ -67,7 +67,7 @@ public class PartialExtractor {
         if (segment.Name is not null && GetProperty(current.GetType(), segment.Name) is { CanRead: true } property) {
             var value = GetPropertyValue(current, property);
             var newPath = currentPath.ToList();
-            newPath.Add(new PropertyStep(GetJsonPropertyName(property)));
+            newPath.Add(new PropertyStep(serializer.GetJsonPropertyName(property)));
             ExtractRecursive(value, segments, segmentIndex + 1, newPath, results);
         }
 
@@ -105,7 +105,7 @@ public class PartialExtractor {
             if (GetProperty(type, targetSegment.Name) is { CanRead: true } property) {
                 var value = GetPropertyValue(current, property);
                 var newPath = currentPath.ToList();
-                newPath.Add(new PropertyStep(GetJsonPropertyName(property)));
+                newPath.Add(new PropertyStep(serializer.GetJsonPropertyName(property)));
                 ExtractRecursive(value, segments, segmentIndex + 1, newPath, results);
             }
         }
@@ -138,7 +138,7 @@ public class PartialExtractor {
                     try {
                         if (GetPropertyValue(current, prop) is { } value) {
                             var newPath = currentPath.ToList();
-                            newPath.Add(new PropertyStep(GetJsonPropertyName(prop)));
+                            newPath.Add(new PropertyStep(serializer.GetJsonPropertyName(prop)));
                             SearchRecursively(value, segments, segmentIndex, newPath, results);
                         }
                     }
@@ -165,7 +165,7 @@ public class PartialExtractor {
 
             var value = GetPropertyValue(current, property);
             var newPath = currentPath.ToList();
-            newPath.Add(new PropertyStep(GetJsonPropertyName(property)));
+            newPath.Add(new PropertyStep(serializer.GetJsonPropertyName(property)));
 
             if (isLast) {
                 results.Add(new(newPath, value));
@@ -221,7 +221,7 @@ public class PartialExtractor {
                 foreach (var property in GetProperties(current.GetType()).Where(p => p.CanRead && p.GetIndexParameters().Length == 0)) {
                     var value = GetPropertyValue(current, property);
                     var newPath = currentPath.ToList();
-                    newPath.Add(new PropertyStep(GetJsonPropertyName(property)));
+                    newPath.Add(new PropertyStep(serializer.GetJsonPropertyName(property)));
                     
                     if (isLast) {
                         results.Add(new(newPath, value));
@@ -289,7 +289,6 @@ public class PartialExtractor {
     private static bool IsSearchableType(Type type) =>
         !type.IsPrimitive && type != typeof(string) && type != typeof(decimal);
 
-    
     private void BuildResultStructure(JsonObject result, ExtractedValue extractedValue) {
         if (extractedValue.Path.Count == 0) {
             return;
@@ -304,7 +303,7 @@ public class PartialExtractor {
                 case PropertyStep { Name: var name }:
                     if (current is JsonObject obj) {
                         if (isLast) {
-                            obj[name] = extractedValue.Value is null ? null : JsonSerializer.SerializeToNode(extractedValue.Value, options);
+                            obj[name] = serializer.Serialize(extractedValue.Value);
                         }
                         else {
                             if (!obj.ContainsKey(name)) {
@@ -323,7 +322,8 @@ public class PartialExtractor {
                         }
 
                         if (isLast) {
-                            arr[index] = extractedValue.Value is null ? null : JsonSerializer.SerializeToNode(extractedValue.Value, options);                        }
+                            arr[index] = serializer.Serialize(extractedValue.Value);
+                        }
                         else {
                             if (arr[index] is null) {
                                 arr[index] = extractedValue.Path[i + 1] is IndexStep ? new JsonArray() : new JsonObject();
@@ -347,31 +347,18 @@ public class PartialExtractor {
         }
     }
 
+    
     private PropertyInfo? GetProperty(Type type, string name) {
         if (type.GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase) is { } prop) {
             return prop;
         }
 
         return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .FirstOrDefault(p => p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name == name);
+            .FirstOrDefault(p => serializer.GetJsonPropertyName(p).Equals(name, StringComparison.OrdinalIgnoreCase));
     }
 
     private IEnumerable<PropertyInfo> GetProperties(Type type) =>
         type.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.GetIndexParameters().Length == 0);
-
-    private string GetJsonPropertyName(PropertyInfo property) {
-        var jsonProp = property.GetCustomAttribute<JsonPropertyNameAttribute>();
-        if (jsonProp is not null) {
-            return jsonProp.Name;
-        }
-
-        // Check if the naming policy is camel case
-        if (options.PropertyNamingPolicy == JsonNamingPolicy.CamelCase) {
-            return JsonNamingPolicy.CamelCase.ConvertName(property.Name);
-        }
-
-        return property.Name;
-    }
 
     private class PathParser(string input) {
         private int position;
