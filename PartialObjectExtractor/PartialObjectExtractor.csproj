@@ -7,7 +7,7 @@
 
         <!-- NuGet Package Properties -->
         <PackageId>PartialObjectExtractor</PackageId>
-        <Version>1.0.1</Version>
+        <Version>2.0.0</Version>
         <Authors>achepta</Authors>
         <Description>Extract partial objects using JSONPath expressions while preserving structure. Uses reflection-first approach for optimal performance with large objects.</Description>
         <PackageTags>jsonpath;json;partial;query;graphql;newtonsoft;extract;filter</PackageTags>
@@ -18,7 +18,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+        <!-- NO DEPENDENCIES! -->
     </ItemGroup>
 
     <ItemGroup>

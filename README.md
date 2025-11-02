@@ -7,7 +7,7 @@ A high-performance C# library for extracting partial objects using JSONPath expr
 This library allows you to query complex object graphs and extract only the data you need, maintaining the hierarchical structure of the original object. Unlike traditional JSONPath implementations
 that return flat arrays of leaf values, this extractor preserves the object structure, making it ideal for API projections and selective serialization.
 
-**Built on Newtonsoft.Json**: This library leverages Newtonsoft.Json for serialization and respects all its conventions, attributes, and settings.
+**Dependency-free**: no transitive dependencies to worry about.
 
 **High Performance**: Uses reflection to traverse objects and extract only requested properties *before* serialization, avoiding the overhead of serializing entire object graphs. Only the extracted
 data is converted to JSON, making it significantly faster for large objects when you only need a subset of data.
@@ -38,7 +38,7 @@ var data = new {
 };
 
 var result = extractor.ExtractPaths(data, ["$.User.Name", "$.User.Email"]);
-Console.WriteLine(expected.ToString(Formatting.Indented));
+Console.WriteLine(expected.ToString());
 ```
 
 Prints:
@@ -168,24 +168,64 @@ Overlapping paths are automatically merged into a single coherent structure.
 
 ### 8. Custom Serialization Settings
 
-Support for custom JSON serialization settings:
-
-```csharp
-var settings = new JsonSerializerSettings {
-    ContractResolver = new CamelCasePropertyNamesContractResolver()
-};
-var extractor = new PartialExtractor(settings);
-```
-
 Respects `[JsonProperty]` attributes:
 
 ```csharp
 public class MyClass {
-    [JsonProperty("display_name")]
+    [JsonPropertyName("display_name")]
     public string DisplayName { get; set; }
 }
 
 extractor.ExtractPaths(obj, ["$.CustomData.display_name"]);
+```
+
+### 9. Custom Serializer
+Example with Newtonsoft.Json:
+
+```csharp
+private class NewtonsoftJsonSerializer(JsonSerializerSettings? settings = null) : IJsonSerializer {
+    private readonly JsonSerializer serializer = JsonSerializer.Create(settings ?? new JsonSerializerSettings());
+
+    public JsonNode? Serialize(object? value) {
+        if (value is null) {
+            return null;
+        }
+
+        var jToken = JToken.FromObject(value, serializer);
+        return JsonNode.Parse(jToken.ToString(Formatting.None));
+    }
+
+    public string GetJsonPropertyName(PropertyInfo property) {
+        var jsonProp = property.GetCustomAttribute<JsonPropertyAttribute>();
+        if (jsonProp?.PropertyName != null) {
+            return jsonProp.PropertyName;
+        }
+
+        if (serializer.ContractResolver is CamelCasePropertyNamesContractResolver) {
+            return ToCamelCase(property.Name);
+        }
+
+        return property.Name;
+    }
+
+    private static string ToCamelCase(string str) =>
+        string.IsNullOrEmpty(str) || char.IsLower(str[0]) ? str : char.ToLower(str[0]) + str[1..];
+}
+```
+
+Usage example:
+
+```csharp
+// Default Newtonsoft.Json settings
+var extractor = new PartialExtractor(new NewtonsoftJsonSerializer());
+
+// With custom settings (e.g., camel case)
+var settings = new JsonSerializerSettings {
+    ContractResolver = new CamelCasePropertyNamesContractResolver()
+};
+var camelExtractor = new PartialExtractor(new NewtonsoftJsonSerializer(settings));
+
+var result = camelExtractor.ExtractPaths(data, ["$.User.Name"]);
 ```
 
 More examples with responses in [tests](TestPartialQuery/PartialObjectExtractorTest.cs)
@@ -206,7 +246,7 @@ More examples with responses in [tests](TestPartialQuery/PartialObjectExtractorT
 - **Non-existent properties**: Returns empty object
 - **Array index out of bounds**: Gracefully skipped
 - **Invalid paths**: Throws `ArgumentException`
-- **Empty collections**: Returns appropriate empty structure
+- **Empty collections**: Returns the appropriate empty structure
 - **Null source**: Returns empty `JObject`
 
 ## Performance Considerations
